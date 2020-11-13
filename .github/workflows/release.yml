@@ -17,9 +17,10 @@ jobs:
       - name: Checkout highlight.js
         uses: actions/checkout@v2
 
-      - name: Tag is ${{ github.ref }}
+      - name: Tag is ${{ github.ref }}.
         run: echo "TAG_NAME=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
-      - if: ${{ !contains(github.ref,'refs/tags/') }}
+      - name: Make sure we are pushing a tag...
+        if: ${{ !contains(github.ref,'refs/tags/') }}
         run: false
         # run: echo "TAG_NAME=0.0.0-test0" >> $GITHUB_ENV
 
