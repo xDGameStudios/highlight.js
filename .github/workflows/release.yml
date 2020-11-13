@@ -101,17 +101,16 @@ jobs:
           git add ./build/
           git commit -m'Update to version ${{ env.TAG_NAME }}'
           git tag ${TAG_NAME}
-          git push --atomic origin ${BRANCH_NAME} ${TAG_NAME}
+          git push -f --atomic origin ${BRANCH_NAME} ${TAG_NAME}
 
-      # - name: Publish cdn-assets to NPM
-      #   id: publish_cdn
-      #   uses: JS-DevTools/npm-publish@v1
-      #   with:
-      #     dry-run: true
-      #     check-version: true
-      #     token: ${{ secrets.NPM_TOKEN }}
-      #     package: ./cdn-release/build/package.json
-      #     tag: ${{ env.NPM_TAG }}
+      - name: Publish cdn-assets to NPM
+        id: publish_cdn
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          check-version: true
+          token: ${{ secrets.NPM_TOKEN }}
+          package: ./cdn-release/build/package.json
+          tag: ${{ env.NPM_TAG }}
 
         # log.info('Updating CDN repo at %s' % settings.HLJS_CDN_SOURCE)
         # run(['nodejs', 'tools/build.js', '--target', 'cdn', ':common'])
