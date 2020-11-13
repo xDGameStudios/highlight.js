@@ -18,11 +18,25 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Tag is ${{ github.ref }}.
-        run: echo "TAG_NAME=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+        # we have to repeat ourselves here since the environment is not actually updated
+        # until the next step executes, so we can't access $TAG_NAME yet
+        run: |
+          echo "TAG_NAME=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+          echo "MAJOR_VERSION=$(echo ${GITHUB_REF/refs\/tags\//} | cut -d'.' -f1)" >> $GITHUB_ENV
       - name: Make sure we are pushing a tag...
         if: ${{ !contains(github.ref,'refs/tags/') }}
         run: false
         # run: echo "TAG_NAME=0.0.0-test0" >> $GITHUB_ENV
+
+      - if: ${{ contains(github.ref, 'beta') || contains(github.ref, 'pre') }}
+        run: |
+          echo "NPM_TAG=beta" >> $GITHUB_ENV
+          echo "RELEASING=beta" >> $GITHUB_ENV
+
+      - if: ${{ !(contains(github.ref, 'beta') || contains(github.ref, 'pre')) }}
+        run: |
+          echo "NPM_TAG=latest" >> $GITHUB_ENV
+          echo "RELEASING=stable" >> $GITHUB_ENV
 
       - name: match-tag-to-package-version
         uses: geritol/match-tag-to-package-version@0.0.2
@@ -39,18 +53,11 @@ jobs:
           node ./tools/build.js -t node
           npm test
 
-      - if: contains(env.GITHUB_REF, 'beta') || contains(env.GITHUB_REF, 'pre')
-        run: echo "NPM_TAG=beta" >> $GITHUB_ENV
-
-      - if: ${{ !(contains(env.GITHUB_REF, 'beta') || contains(env.GITHUB_REF, 'pre')) }}
-        run: echo "NPM_TAG=latest" >> $GITHUB_ENV
-
       - name: Publish highlight.js to NPM
         id: publish
         uses: JS-DevTools/npm-publish@v1
         with:
           check-version: true
-          dry-run: true
           token: ${{ secrets.NPM_TOKEN }}
           package: ./build/package.json
           tag: ${{ env.NPM_TAG }}
@@ -59,12 +66,27 @@ jobs:
         run: |
           echo "Version changed: ${{ steps.publish.outputs.old-version }} => ${{ steps.publish.outputs.version }}"
 
+        # if stable release
+      - name: Stable Release
+        if: env.RELEASING == 'stable'
+        run: echo "BRANCH_NAME=${MAJOR_VERSION}-stable" >> $GITHUB_ENV
+        # else (beta)
+      - name: Beta Release
+        if: env.RELEASING == 'beta'
+        run: echo "BRANCH_NAME=master" >> $GITHUB_ENV
+      - name: Confirm release is either stable or beta
+        if: ${{ !(env.RELEASING == 'stable' || env.RELEASING == 'beta') }}
+        run: |
+          echo We seem to be releasing `${RELEASING}`.
+          false
+
       - name: Checkout cdn-release
         uses: actions/checkout@v2
         with:
           repository: 'highlightjs/cdn-release'
           path: 'cdn-release'
           token: ${{ secrets.CDN_REPO_TOKEN }}
+          ref: ${{ env.BRANCH_NAME }}
 
       - name: Build CDN package
         run: node ./tools/build.js -t cdn :common
@@ -79,17 +101,17 @@ jobs:
           git add ./build/
           git commit -m'Update to version ${{ env.TAG_NAME }}'
           git tag ${TAG_NAME}
-          git push -f --atomic origin HEAD:test_branch ${TAG_NAME}
+          git push --atomic origin ${BRANCH_NAME} ${TAG_NAME}
 
-      - name: Publish cdn-assets to NPM
-        id: publish_cdn
-        uses: JS-DevTools/npm-publish@v1
-        with:
-          check-version: true
-          dry-run: true
-          token: ${{ secrets.NPM_TOKEN }}
-          package: ./cdn-release/build/package.json
-          tag: ${{ env.NPM_TAG }}
+      # - name: Publish cdn-assets to NPM
+      #   id: publish_cdn
+      #   uses: JS-DevTools/npm-publish@v1
+      #   with:
+      #     dry-run: true
+      #     check-version: true
+      #     token: ${{ secrets.NPM_TOKEN }}
+      #     package: ./cdn-release/build/package.json
+      #     tag: ${{ env.NPM_TAG }}
 
         # log.info('Updating CDN repo at %s' % settings.HLJS_CDN_SOURCE)
         # run(['nodejs', 'tools/build.js', '--target', 'cdn', ':common'])
